@@ -155,11 +155,11 @@
                 try {
                     // This line will no longer fail, as "Peer" is now defined.
                     peer = new Peer(undefined, {
-                        host: 'peerjs.vo.ll.to', // Using a reliable public PeerJS server
-                        secure: true,
-                        port: 443,
-                        path: '/'
-                    });
+    host: 'broker.peerjs.com', // Using the official PeerJS broker server
+    secure: true,
+    port: 443,
+    path: '/'
+});
                 } catch (e) {
                      console.error("Failed to initialize PeerJS:", e);
                      statusEl.textContent = 'Error: Could not start peer service. Please refresh.';
