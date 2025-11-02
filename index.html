@@ -1,16 +1,11 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Send - Local File Transfer</title>
     
-    <!-- 
-      CDN scripts moved from here to the end of <body>
-      to fix the "Peer is not defined" race condition.
-    -->
-
-    <!-- 2. CSS inlined from style.css -->
+    <!-- 1. Saara CSS code ab yahaan <style> tag ke andar hai -->
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -100,6 +95,7 @@
 </head>
 <body>
 
+    <!-- 2. Yeh aapka HTML structure hai -->
     <div class="container">
         <header>
             <h1>QR Send</h1>
@@ -124,18 +120,17 @@
         </div>
     </div>
 
-    <!-- 
-      FIX: Moved CDN scripts here, just before the inline script.
-      This ensures Peer and QRCode objects are defined *before*
-      the main script attempts to use them.
-    -->
-    <!-- 1. UPDATED CDN LINKS -->
-    <!-- PeerJS (Updated to a newer stable version) -->
- <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>    <!-- QRCode.js (Fixed broken rawgit link with a working cdnjs link) -->
- <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- 3. JavaScript inlined from main.js and wrapped in DOMContentLoaded -->
+    <!-- 3. Zaroori JavaScript libraries -->
+    <!-- Sahi aur chalti hui CDN links -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <!-- 4. Aapka poora JavaScript code -->
     <script>
+        // DOMContentLoaded ka intezar karein, taaki code HTML load hone ke baad chale
         document.addEventListener('DOMContentLoaded', () => {
+            
+            // Sabhi HTML elements ko select karna
             const statusEl = document.getElementById('status');
             const qrCodeContainer = document.getElementById('qr-code-container');
             const qrEl = document.getElementById('qrcode');
@@ -150,22 +145,19 @@
             const CHUNK_SIZE = 64 * 1024; // 64KB
 
             function initializePeer() {
-                // We pass 'undefined' to let the server generate an ID
-                // This explicit configuration can be more reliable than the default.
                 try {
-                    // This line will no longer fail, as "Peer" is now defined.
-                    peer = new Peer(undefined, {
-    host: 'broker.peerjs.com', // Using the official PeerJS broker server
-    secure: true,
-    port: 443,
-    path: '/'
-});
+                    // YAHI HAI SABSE ZAROORI BADLAAV:
+                    // Humne koi host ya port nahi diya hai.
+                    // 'new Peer()' likhne se yeh apne aap PeerJS ke official server se connect ho jaayega.
+                    peer = new Peer(); 
+                
                 } catch (e) {
                      console.error("Failed to initialize PeerJS:", e);
                      statusEl.textContent = 'Error: Could not start peer service. Please refresh.';
                      return;
                 }
 
+                // Jab PeerJS server se connect ho jaaye aur ID mil jaaye
                 peer.on('open', (id) => {
                     myId = id;
                     statusEl.textContent = 'Your device is ready.';
@@ -173,6 +165,7 @@
                     const targetId = window.location.hash.substring(1);
 
                     if (targetId) {
+                        // Agar URL mein # ke baad ID hai (matlab yeh doosra device hai)
                         qrCodeContainer.style.display = 'none';
                         scanInstructions.style.display = 'block';
                         statusEl.textContent = 'Connecting...';
@@ -184,6 +177,8 @@
                             statusEl.textContent = 'Connection failed. Please refresh.';
                         }
                     } else {
+                        // Agar URL mein ID nahi hai (matlab yeh pehla device hai)
+                        // QR code banao
                         const connectUrl = `${window.location.origin}${window.location.pathname}#${myId}`;
                         new QRCode(qrEl, {
                             text: connectUrl,
@@ -197,6 +192,7 @@
                     }
                 });
 
+                // Jab koi doosra device aapse connect kare
                 peer.on('connection', (conn) => {
                     console.log('Incoming connection from', conn.peer);
                     if (currentConnection && currentConnection.open) {
@@ -210,15 +206,14 @@
                     scanInstructions.style.display = 'block';
                 });
 
+                // PeerJS mein koi error aane par
                 peer.on('error', (err) => {
                     console.error('PeerJS error:', err);
-                    // Handle different types of errors
                     if (err.type === 'peer-unavailable') {
                         statusEl.textContent = 'Error: Could not find the other device. Please try again.';
-                        // Reset UI for reconnection
                         qrCodeContainer.style.display = 'block';
                         scanInstructions.style.display = 'none';
-                        window.location.hash = ''; // Clear the hash
+                        window.location.hash = ''; 
                     } else {
                         statusEl.textContent = `Error: ${err.message}. Try refreshing.`;
                     }
@@ -227,13 +222,13 @@
 
             function setupConnection(conn) {
                 if (currentConnection && currentConnection.open) {
-                    console.warn("Attempting to set up new connection while old one is still open.");
                     currentConnection.close();
                 }
                 
                 currentConnection = conn;
                 console.log('Setting up connection with', conn.peer);
 
+                // Connection safal hone par
                 conn.on('open', () => {
                     console.log('Connection established with', conn.peer);
                     statusEl.textContent = `Connected!`;
@@ -246,30 +241,34 @@
                 let incomingFileData = [];
                 let fileMetadata = {};
 
+                // Jab file data aaye
                 conn.on('data', (data) => {
                     if (data.type === 'metadata') {
+                        // File ki jaankari (naam, size)
                         fileMetadata = data;
                         incomingFileData = [];
                         console.log('Receiving metadata:', fileMetadata);
                         transferStatusEl.textContent = `Receiving: ${fileMetadata.name}`;
                     } else if (data.type === 'end') {
+                        // File poori aa gayi
                         console.log('File transfer complete.');
-                        const fileBlob = new Blob(incomingFileData, { type: fileMetadata.fileType }); // Use fileType from metadata
+                        const fileBlob = new Blob(incomingFileData, { type: fileMetadata.fileType });
                         const downloadUrl = URL.createObjectURL(fileBlob);
                         const a = document.createElement('a');
                         a.href = downloadUrl;
                         a.download = fileMetadata.name;
                         document.body.appendChild(a);
-                        a.click();
+                        a.click(); // File automatically download karein
                         a.remove();
-                        URL.revokeObjectURL(downloadUrl); // Clean up the object URL
+                        URL.revokeObjectURL(downloadUrl);
                         transferStatusEl.textContent = `File ${fileMetadata.name} received!`;
                     } else {
-                        // This is a file chunk (ArrayBuffer)
+                        // File ke chote chote tukde (chunks)
                         incomingFileData.push(data);
                     }
                 });
 
+                // Connection band hone par
                 conn.on('close', () => {
                     console.log('Connection closed with', conn.peer);
                     statusEl.textContent = 'Device disconnected.';
@@ -277,17 +276,15 @@
                     fileInput.disabled = true;
                     currentConnection = null;
                     
-                    // Reset UI to allow new connection
                     qrCodeContainer.style.display = 'block';
                     scanInstructions.style.display = 'none';
-                    qrEl.innerHTML = ''; // Clear old QR code
-                    window.location.hash = ''; // Clear hash to prevent auto-connect
+                    qrEl.innerHTML = '';
+                    window.location.hash = ''; 
                     
-                    // Re-initialize to get a new ID and QR code
                     if(peer) {
-                        peer.destroy(); // Destroy old peer object
+                        peer.destroy(); // Purana connection poori tarah band karein
                     }
-                    initializePeer(); // Get a new peer ID and QR code
+                    initializePeer(); // Naya QR code banane ke liye fir se shuru karein
                 });
 
                 conn.on('error', (err) => {
@@ -296,6 +293,7 @@
                 });
             }
 
+            // File select karne par
             fileInput.addEventListener('change', (event) => {
                 const file = event.target.files[0];
                 if (!file || !currentConnection || !currentConnection.open) {
@@ -306,11 +304,12 @@
                 console.log('Sending file:', file.name);
                 transferStatusEl.textContent = `Sending ${file.name}...`;
 
+                // 1. Pehle file ki jaankari bhejein
                 currentConnection.send({
                     type: 'metadata',
                     name: file.name,
                     size: file.size,
-                    fileType: file.type // Send file type
+                    fileType: file.type
                 });
 
                 let offset = 0;
@@ -324,12 +323,14 @@
                     }
                     
                     try {
-                        currentConnection.send(e.target.result); // Send ArrayBuffer chunk
+                        // 2. File ke tukde (chunks) bhejein
+                        currentConnection.send(e.target.result); 
                         offset += e.target.result.byteLength;
 
                         if (offset < file.size) {
-                            readSlice(offset);
+                            readSlice(offset); // Agla tukda padhein
                         } else {
+                            // 3. File poori bhej di, ab 'end' signal bhejein
                             currentConnection.send({ type: 'end' });
                             console.log('File sent successfully.');
                             transferStatusEl.textContent = `File ${file.name} sent!`;
@@ -349,10 +350,10 @@
                     const slice = file.slice(o, o + CHUNK_SIZE);
                     reader.readAsArrayBuffer(slice);
                 }
-                readSlice(0);
+                readSlice(0); // Pehla tukda padhna shuru karein
             });
 
-            // Start the application
+            // Application shuru karein
             initializePeer();
         });
     </script>
