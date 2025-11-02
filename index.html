@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Send - Local File Transfer</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peer.min.js"></script>
+    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>QR Send</h1>
+            <div id="status">Initializing...</div>
+        </header>
+        
+        <main>
+            <div id="qr-code-container">
+                <div id="qrcode"></div>
+                <p>Scan this QR code with your other device's camera to connect.</p>
+            </div>
+
+            <div id="scan-instructions" style="display:none;">
+                <p>You are connected! You can now send files from this device.</p>
+            </div>
+        </main>
+
+        <div class="transfer-area">
+            <h3>Send a File</h3>
+            <input type="file" id="file-input" disabled>
+            <div id="transfer-status">Connect to a device to send files.</div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
