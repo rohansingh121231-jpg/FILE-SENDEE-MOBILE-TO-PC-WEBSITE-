@@ -4,9 +4,99 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Send - Local File Transfer</title>
-    <link rel="stylesheet" href="style.css">
-     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peer.min.js"></script>
-    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+    
+    <!-- 
+      CDN scripts moved from here to the end of <body>
+      to fix the "Peer is not defined" race condition.
+    -->
+
+    <!-- 2. CSS inlined from style.css -->
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 90vh;
+        }
+
+        .container {
+            max-width: 450px;
+            width: 100%;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            text-align: center;
+        }
+
+        header {
+            background: #007bff;
+            color: white;
+            padding: 20px;
+        }
+
+        header h1 {
+            margin: 0;
+        }
+
+        #status {
+            font-size: 0.9em;
+            opacity: 0.9;
+            padding-top: 5px;
+        }
+
+        main {
+            padding: 25px;
+        }
+
+        #qr-code-container p {
+            font-weight: 500;
+            color: #333;
+        }
+
+        #qrcode {
+            width: 256px;
+            height: 256px;
+            margin: 0 auto 20px auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        #scan-instructions {
+            font-size: 1.1em;
+            font-weight: 500;
+            color: #28a745;
+        }
+
+        .transfer-area {
+            padding: 25px;
+            background: #f9f9f9;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        #file-input {
+            margin-bottom: 15px;
+            display: block;
+            width: 100%;
+        }
+
+        #transfer-status {
+            font-size: 0.9em;
+            color: #555;
+            word-wrap: break-word;
+        }
+    </style>
 </head>
 <body>
 
@@ -34,6 +124,241 @@
         </div>
     </div>
 
-    <script src="main.js"></script>
+    <!-- 
+      FIX: Moved CDN scripts here, just before the inline script.
+      This ensures Peer and QRCode objects are defined *before*
+      the main script attempts to use them.
+    -->
+    <!-- 1. UPDATED CDN LINKS -->
+    <!-- PeerJS (Updated to a newer stable version) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peer.min.js"></script>
+    <!-- QRCode.js (Fixed broken rawgit link with a working cdnjs link) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+
+    <!-- 3. JavaScript inlined from main.js and wrapped in DOMContentLoaded -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const statusEl = document.getElementById('status');
+            const qrCodeContainer = document.getElementById('qr-code-container');
+            const qrEl = document.getElementById('qrcode');
+            const scanInstructions = document.getElementById('scan-instructions');
+            const fileInput = document.getElementById('file-input');
+            const transferStatusEl = document.getElementById('transfer-status');
+
+            let peer = null;
+            let currentConnection = null;
+            let myId = '';
+
+            const CHUNK_SIZE = 64 * 1024; // 64KB
+
+            function initializePeer() {
+                // We pass 'undefined' to let the server generate an ID
+                // This explicit configuration can be more reliable than the default.
+                try {
+                    // This line will no longer fail, as "Peer" is now defined.
+                    peer = new Peer(undefined, {
+                        host: 'peerjs.vo.ll.to', // Using a reliable public PeerJS server
+                        secure: true,
+                        port: 443,
+                        path: '/'
+                    });
+                } catch (e) {
+                     console.error("Failed to initialize PeerJS:", e);
+                     statusEl.textContent = 'Error: Could not start peer service. Please refresh.';
+                     return;
+                }
+
+                peer.on('open', (id) => {
+                    myId = id;
+                    statusEl.textContent = 'Your device is ready.';
+                    
+                    const targetId = window.location.hash.substring(1);
+
+                    if (targetId) {
+                        qrCodeContainer.style.display = 'none';
+                        scanInstructions.style.display = 'block';
+                        statusEl.textContent = 'Connecting...';
+                        try {
+                            const conn = peer.connect(targetId, { reliable: true });
+                            setupConnection(conn);
+                        } catch (e) {
+                            console.error("Connection failed:", e);
+                            statusEl.textContent = 'Connection failed. Please refresh.';
+                        }
+                    } else {
+                        const connectUrl = `${window.location.origin}${window.location.pathname}#${myId}`;
+                        new QRCode(qrEl, {
+                            text: connectUrl,
+                            width: 256,
+                            height: 256,
+                            colorDark : "#000000",
+                            colorLight : "#ffffff",
+                            correctLevel : QRCode.CorrectLevel.H
+                        });
+                        statusEl.textContent = 'Ready to connect.';
+                    }
+                });
+
+                peer.on('connection', (conn) => {
+                    console.log('Incoming connection from', conn.peer);
+                    if (currentConnection && currentConnection.open) {
+                        console.log('Already connected. Rejecting new connection.');
+                        conn.close();
+                        return;
+                    }
+                    statusEl.textContent = 'Device connected!';
+                    setupConnection(conn);
+                    qrCodeContainer.style.display = 'none';
+                    scanInstructions.style.display = 'block';
+                });
+
+                peer.on('error', (err) => {
+                    console.error('PeerJS error:', err);
+                    // Handle different types of errors
+                    if (err.type === 'peer-unavailable') {
+                        statusEl.textContent = 'Error: Could not find the other device. Please try again.';
+                        // Reset UI for reconnection
+                        qrCodeContainer.style.display = 'block';
+                        scanInstructions.style.display = 'none';
+                        window.location.hash = ''; // Clear the hash
+                    } else {
+                        statusEl.textContent = `Error: ${err.message}. Try refreshing.`;
+                    }
+                });
+            }
+
+            function setupConnection(conn) {
+                if (currentConnection && currentConnection.open) {
+                    console.warn("Attempting to set up new connection while old one is still open.");
+                    currentConnection.close();
+                }
+                
+                currentConnection = conn;
+                console.log('Setting up connection with', conn.peer);
+
+                conn.on('open', () => {
+                    console.log('Connection established with', conn.peer);
+                    statusEl.textContent = `Connected!`;
+                    fileInput.disabled = false;
+                    transferStatusEl.textContent = 'Select a file to send.';
+                    qrCodeContainer.style.display = 'none';
+                    scanInstructions.style.display = 'block';
+                });
+
+                let incomingFileData = [];
+                let fileMetadata = {};
+
+                conn.on('data', (data) => {
+                    if (data.type === 'metadata') {
+                        fileMetadata = data;
+                        incomingFileData = [];
+                        console.log('Receiving metadata:', fileMetadata);
+                        transferStatusEl.textContent = `Receiving: ${fileMetadata.name}`;
+                    } else if (data.type === 'end') {
+                        console.log('File transfer complete.');
+                        const fileBlob = new Blob(incomingFileData, { type: fileMetadata.fileType }); // Use fileType from metadata
+                        const downloadUrl = URL.createObjectURL(fileBlob);
+                        const a = document.createElement('a');
+                        a.href = downloadUrl;
+                        a.download = fileMetadata.name;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        URL.revokeObjectURL(downloadUrl); // Clean up the object URL
+                        transferStatusEl.textContent = `File ${fileMetadata.name} received!`;
+                    } else {
+                        // This is a file chunk (ArrayBuffer)
+                        incomingFileData.push(data);
+                    }
+                });
+
+                conn.on('close', () => {
+                    console.log('Connection closed with', conn.peer);
+                    statusEl.textContent = 'Device disconnected.';
+                    transferStatusEl.textContent = 'Connect to a device to send files.';
+                    fileInput.disabled = true;
+                    currentConnection = null;
+                    
+                    // Reset UI to allow new connection
+                    qrCodeContainer.style.display = 'block';
+                    scanInstructions.style.display = 'none';
+                    qrEl.innerHTML = ''; // Clear old QR code
+                    window.location.hash = ''; // Clear hash to prevent auto-connect
+                    
+                    // Re-initialize to get a new ID and QR code
+                    if(peer) {
+                        peer.destroy(); // Destroy old peer object
+                    }
+                    initializePeer(); // Get a new peer ID and QR code
+                });
+
+                conn.on('error', (err) => {
+                    console.error('Connection error:', err);
+                    statusEl.textContent = `Connection error: ${err.message}`;
+                });
+            }
+
+            fileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file || !currentConnection || !currentConnection.open) {
+                    transferStatusEl.textContent = 'Error: Not connected to a device.';
+                    return;
+                }
+
+                console.log('Sending file:', file.name);
+                transferStatusEl.textContent = `Sending ${file.name}...`;
+
+                currentConnection.send({
+                    type: 'metadata',
+                    name: file.name,
+                    size: file.size,
+                    fileType: file.type // Send file type
+                });
+
+                let offset = 0;
+                const reader = new FileReader();
+
+                reader.onload = (e) => {
+                    if (!currentConnection || !currentConnection.open) {
+                        console.error("Connection lost during file send.");
+                        transferStatusEl.textContent = 'Error: Connection lost.';
+                        return;
+                    }
+                    
+                    try {
+                        currentConnection.send(e.target.result); // Send ArrayBuffer chunk
+                        offset += e.target.result.byteLength;
+
+                        if (offset < file.size) {
+                            readSlice(offset);
+                        } else {
+                            currentConnection.send({ type: 'end' });
+                            console.log('File sent successfully.');
+                            transferStatusEl.textContent = `File ${file.name} sent!`;
+                        }
+                    } catch (e) {
+                         console.error("Error sending data:", e);
+                         transferStatusEl.textContent = `Error sending file. Please try again.`;
+                    }
+                };
+                
+                reader.onerror = (e) => {
+                    console.error("File reader error:", e);
+                    transferStatusEl.textContent = 'Error reading file.';
+                };
+
+                function readSlice(o) {
+                    const slice = file.slice(o, o + CHUNK_SIZE);
+                    reader.readAsArrayBuffer(slice);
+                }
+                readSlice(0);
+            });
+
+            // Start the application
+            initializePeer();
+        });
+    </script>
 </body>
 </html>
+
